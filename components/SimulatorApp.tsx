@@ -56,7 +56,7 @@ export default function SimulatorApp() {
       </AnimatePresence>
 
       {/* Main content */}
-      <main className={step !== 'landing' ? 'pt-14 pb-8' : ''}>
+      <main className={`relative z-10 ${step !== 'landing' ? 'pt-14 pb-8' : ''}`}>
         <AnimatePresence mode="wait">
           {step === 'landing' && (
             <motion.div key="landing">
