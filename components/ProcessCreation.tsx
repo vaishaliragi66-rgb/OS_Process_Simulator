@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSimStore } from '@/store/useSimStore';
 import ProcessCard from './ProcessCard';
@@ -10,14 +10,88 @@ const MAX_PROCESSES = 6;
 export default function ProcessCreation() {
   const { processes, addProcess, removeProcess, goToStep } = useSimStore();
   const [customBurst, setCustomBurst] = useState('');
+  const [customArrival, setCustomArrival] = useState('');
   const [showCustom, setShowCustom] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const updateProcess = useSimStore(s => s.updateProcess);
 
   const handleAdd = () => {
     if (processes.length >= MAX_PROCESSES) return;
     const burst = customBurst ? parseInt(customBurst, 10) : undefined;
-    addProcess(burst ? { burstTime: burst, remainingTime: burst } : undefined);
+    const arrival = customArrival ? parseInt(customArrival, 10) : 0;
+    addProcess(burst ? { burstTime: burst, remainingTime: burst, arrivalTime: arrival } : { arrivalTime: arrival });
     setCustomBurst('');
+    setCustomArrival('');
     setShowCustom(false);
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const lines = content.trim().split('\n').filter(line => line.trim());
+        
+        if (lines.length === 0) {
+          setUploadError('File is empty');
+          return;
+        }
+
+        if (lines.length > MAX_PROCESSES) {
+          setUploadError(`Too many processes. Max is ${MAX_PROCESSES}`);
+          return;
+        }
+
+        // Parse each line: ProcessID BurstTime ArrivalTime Priority
+        const parsedProcesses: Array<{ burstTime: number; arrivalTime: number; priority: number }> = [];
+        
+        for (let i = 0; i < lines.length; i++) {
+          const parts = lines[i].trim().split(/\s+/);
+          if (parts.length < 4) {
+            setUploadError(`Line ${i + 1}: Invalid format. Expected: ProcessID BurstTime ArrivalTime Priority`);
+            return;
+          }
+
+          const burstTime = parseInt(parts[1], 10);
+          const arrivalTime = parseInt(parts[2], 10);
+          const priority = parseInt(parts[3], 10);
+
+          if (isNaN(burstTime) || burstTime < 1 || burstTime > 30) {
+            setUploadError(`Line ${i + 1}: Burst time must be between 1 and 30`);
+            return;
+          }
+
+          if (isNaN(arrivalTime) || arrivalTime < 0 || arrivalTime > 20) {
+            setUploadError(`Line ${i + 1}: Arrival time must be between 0 and 20`);
+            return;
+          }
+
+          if (isNaN(priority) || priority < 1 || priority > 10) {
+            setUploadError(`Line ${i + 1}: Priority must be between 1 and 10`);
+            return;
+          }
+
+          parsedProcesses.push({ burstTime, arrivalTime, priority });
+        }
+
+        // Add all processes
+        parsedProcesses.forEach(proc => {
+          addProcess({ ...proc, remainingTime: proc.burstTime });
+        });
+
+        setUploadError('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      } catch (error) {
+        setUploadError('Failed to parse file');
+      }
+    };
+
+    reader.readAsText(file);
   };
 
   const canProceed = processes.length >= 2;
@@ -63,6 +137,8 @@ export default function ProcessCreation() {
                   showRemove
                   onRemove={() => removeProcess(p.id)}
                   index={i}
+                  editable
+                  onUpdate={(updates) => updateProcess(p.id, updates)}
                 />
               ))}
             </div>
@@ -84,10 +160,10 @@ export default function ProcessCreation() {
               <input
                 type="number"
                 min={1}
-                max={20}
+                max={30}
                 value={customBurst}
                 onChange={e => setCustomBurst(e.target.value)}
-                placeholder="Burst time (1–20)"
+                placeholder="Burst (1–30)"
                 className="flex-1 px-3 py-2 rounded-lg text-sm font-mono text-white outline-none"
                 style={{
                   background: 'rgba(255,255,255,0.05)',
@@ -97,11 +173,51 @@ export default function ProcessCreation() {
                 onKeyDown={e => e.key === 'Enter' && handleAdd()}
                 autoFocus
               />
+              <input
+                type="number"
+                min={0}
+                max={20}
+                value={customArrival}
+                onChange={e => setCustomArrival(e.target.value)}
+                placeholder="Arrival (0–20)"
+                className="flex-1 px-3 py-2 rounded-lg text-sm font-mono text-white outline-none"
+                style={{
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(0,229,255,0.3)',
+                  caretColor: '#00E5FF',
+                }}
+                onKeyDown={e => e.key === 'Enter' && handleAdd()}
+              />
             </motion.div>
           )}
         </AnimatePresence>
 
         <div className="flex gap-3">
+          {/* File upload button */}
+          {processes.length < MAX_PROCESSES && (
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".txt"
+                onChange={handleFileUpload}
+                className="hidden"
+                id="file-upload"
+              />
+              <label
+                htmlFor="file-upload"
+                className="px-4 py-2.5 rounded-lg text-sm font-mono border cursor-pointer inline-block"
+                style={{
+                  border: '1px solid rgba(255,136,68,0.3)',
+                  background: 'rgba(255,136,68,0.08)',
+                  color: '#FF8844',
+                }}
+              >
+                📁 Upload File
+              </label>
+            </motion.div>
+          )}
+          
           {/* Toggle custom input */}
           {processes.length < MAX_PROCESSES && (
             <motion.button
@@ -115,7 +231,7 @@ export default function ProcessCreation() {
                 color: '#64748b',
               }}
             >
-              {showCustom ? 'Cancel' : '⚙ Custom Burst'}
+              {showCustom ? 'Cancel' : '⚙ Custom Values'}
             </motion.button>
           )}
 
@@ -162,6 +278,22 @@ export default function ProcessCreation() {
           ))}
           <span className="text-xs font-mono text-slate-500 ml-1">{processes.length} / {MAX_PROCESSES}</span>
         </div>
+
+        {/* Upload error */}
+        {uploadError && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="mt-3 px-3 py-2 rounded-lg text-xs font-mono"
+            style={{
+              background: 'rgba(255,68,102,0.1)',
+              border: '1px solid rgba(255,68,102,0.3)',
+              color: '#FF4466',
+            }}
+          >
+            ⚠️ {uploadError}
+          </motion.div>
+        )}
       </div>
 
       {/* Next step */}

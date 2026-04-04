@@ -113,7 +113,7 @@ export default function LandingScreen() {
         transition={{ delay: 1.8 }}
         className="mt-8 text-slate-500 text-sm font-mono"
       >
-        4 algorithms · interactive predictions · visual learning
+        6 algorithms · step-by-step teaching · visual learning
       </motion.p>
 
       {/* Floating particles */}
