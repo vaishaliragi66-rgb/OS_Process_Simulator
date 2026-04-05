@@ -10,6 +10,8 @@ interface ProcessCardProps {
   onRemove?: () => void;
   compact?: boolean;
   index?: number;
+  editable?: boolean;
+  onUpdate?: (updates: Partial<Process>) => void;
 }
 
 export default function ProcessCard({
@@ -20,6 +22,8 @@ export default function ProcessCard({
   onRemove,
   compact,
   index = 0,
+  editable = false,
+  onUpdate,
 }: ProcessCardProps) {
   const color = process.color;
 
@@ -90,6 +94,30 @@ export default function ProcessCard({
                   transition={{ delay: 0.2 + index * 0.06 }}
                 />
               </div>
+            </div>
+
+            {/* Arrival Time */}
+            <div className="flex items-center justify-between text-[10px] font-mono mb-1">
+              <span className="text-slate-600">arrival</span>
+              {editable && onUpdate ? (
+                <input
+                  type="number"
+                  min={0}
+                  max={20}
+                  value={process.arrivalTime}
+                  onChange={(e) => onUpdate({ arrivalTime: parseInt(e.target.value) || 0 })}
+                  className="w-12 px-1 py-0.5 rounded text-right outline-none"
+                  style={{
+                    background: 'rgba(255,255,255,0.08)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    color: color,
+                    caretColor: color,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <span className="text-slate-400">{process.arrivalTime}</span>
+              )}
             </div>
 
             {/* Priority */}

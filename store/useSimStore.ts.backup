@@ -41,7 +41,6 @@ interface SimState {
   setPlaying: (val: boolean) => void;
   toggleExplainMode: () => void;
   resetSimulation: () => void;
-  resetToAlgorithmSelection: () => void;
   toggleRealTime: () => void;
   setRealTimeSpeed: (speed: number) => void;
   setContextSwitchTime: (time: number) => void;
@@ -131,7 +130,7 @@ export const useSimStore = create<SimState>((set, get) => ({
     }
 
     // Execute next step
-    const newState = executeStep(stepState, selectedAlgorithm, processes);
+    const newState = executeStep(stepState, selectedAlgorithm);
     
     set({
       stepState: newState,
@@ -167,22 +166,6 @@ export const useSimStore = create<SimState>((set, get) => ({
       isPlaying: false,
       currentTime: 0,
       isRealTime: false,
-      stepState: null,
-      isStepMode: true,
-    });
-  },
-
-  resetToAlgorithmSelection: () => {
-    // Preserve processes but reset execution state
-    set({
-      step: 'algorithm',
-      selectedAlgorithm: null,
-      algorithmInputs: {},
-      schedule: null,
-      executionIndex: 0,
-      visibleBlocks: [],
-      isPlaying: false,
-      currentTime: 0,
       stepState: null,
       isStepMode: true,
     });

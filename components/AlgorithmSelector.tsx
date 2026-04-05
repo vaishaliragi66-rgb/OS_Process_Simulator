@@ -1,15 +1,19 @@
 'use client';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Algorithm, ALGORITHM_INFO } from '@/types';
 import { useSimStore } from '@/store/useSimStore';
 import { getPreviewOrder } from '@/utils/scheduling';
 import ExplainBox from './ExplainBox';
+import AlgorithmInputModal, { AlgorithmInputs } from './AlgorithmInputModal';
 
 const ALGO_ICONS: Record<Algorithm, string> = {
   fcfs: '📋',
   sjf: '⚡',
   priority: '🎯',
   rr: '🔄',
+  srtf: '⚡',
+  'preemptive-priority': '🎯',
 };
 
 const ALGO_COLORS: Record<Algorithm, string> = {
@@ -17,14 +21,34 @@ const ALGO_COLORS: Record<Algorithm, string> = {
   sjf: '#00FF88',
   priority: '#FFB800',
   rr: '#BB88FF',
+  srtf: '#FF8844',
+  'preemptive-priority': '#FF4466',
 };
 
 export default function AlgorithmSelector() {
-  const { selectedAlgorithm, selectAlgorithm, processes, goToStep, startExecution } = useSimStore();
+  const { selectedAlgorithm, selectAlgorithm, processes, goToStep, startExecution, setAlgorithmInputs } = useSimStore();
+  const [showInputModal, setShowInputModal] = useState(false);
 
-  const algorithms: Algorithm[] = ['fcfs', 'sjf', 'priority', 'rr'];
+  const algorithms: Algorithm[] = ['fcfs', 'sjf', 'priority', 'rr', 'srtf', 'preemptive-priority'];
 
   const handleStartExecution = () => {
+    const needsInputs =
+      selectedAlgorithm === 'priority' ||
+      selectedAlgorithm === 'preemptive-priority' ||
+      selectedAlgorithm === 'rr';
+
+    if (needsInputs) {
+      setShowInputModal(true);
+    } else {
+      setAlgorithmInputs({});
+      startExecution();
+      goToStep('execution');
+    }
+  };
+
+  const handleInputsComplete = (inputs: AlgorithmInputs) => {
+    setAlgorithmInputs(inputs);
+    setShowInputModal(false);
     startExecution();
     goToStep('execution');
   };
@@ -187,6 +211,13 @@ export default function AlgorithmSelector() {
           )}
         </motion.button>
       </div>
+
+      {/* Algorithm Input Modal */}
+      <AlgorithmInputModal
+        isOpen={showInputModal}
+        onClose={() => setShowInputModal(false)}
+        onComplete={handleInputsComplete}
+      />
     </motion.div>
   );
 }
