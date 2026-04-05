@@ -88,7 +88,7 @@ export default function ProcessTable({ processes, stepState }: ProcessTableProps
                   {state?.completionTime ?? '—'}
                 </td>
                 <td className="px-3 py-2 text-xs font-mono text-slate-300">
-                  {state?.waitingTime ?? '—'}
+                  {state?.waitingTime !== undefined ? state.waitingTime : '—'}
                 </td>
                 <td className="px-3 py-2 text-xs font-mono text-slate-300">
                   {state?.turnaroundTime ?? '—'}

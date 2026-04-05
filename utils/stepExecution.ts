@@ -12,6 +12,7 @@ export interface StepExecutionState {
     completionTime?: number;
     waitingTime?: number;
     turnaroundTime?: number;
+    executedTime: number; // Track time spent executing
   }>;
   ganttBlocks: TimelineBlock[];
   quantum?: number;
@@ -35,7 +36,11 @@ export function initializeStepExecution(
     explanation: 'Simulation starting. Processes will enter the ready queue as they arrive.',
     processStates: processes.reduce((acc, p) => ({
       ...acc,
-      [p.id]: { remainingTime: p.burstTime }
+      [p.id]: { 
+        remainingTime: p.burstTime,
+        executedTime: 0,
+        waitingTime: 0
+      }
     }), {}),
     ganttBlocks: [],
     quantum,
@@ -107,11 +112,45 @@ function selectNextProcess(
   }
 }
 
+// Helper to calculate real-time waiting time for all processes
+function updateWaitingTimes(state: StepExecutionState, processes: Process[]): void {
+  processes.forEach(p => {
+    // Skip if not arrived yet
+    if (p.arrivalTime > state.currentTime) {
+      return;
+    }
+    
+    // Skip if already completed (waiting time already finalized)
+    if (state.completedProcesses.has(p.id)) {
+      return;
+    }
+    
+    // For active processes: Waiting Time = (Current Time - Arrival Time) - Time Spent Executing
+    const timeInSystem = state.currentTime - p.arrivalTime;
+    const executedTime = state.processStates[p.id].executedTime || 0;
+    const calculatedWaiting = timeInSystem - executedTime;
+    
+    // Update with immutable pattern
+    state.processStates[p.id] = {
+      ...state.processStates[p.id],
+      waitingTime: Math.max(0, calculatedWaiting), // Ensure non-negative
+    };
+  });
+}
+
 export function executeStep(
   state: StepExecutionState,
-  algorithm: Algorithm
+  algorithm: Algorithm,
+  allProcesses: Process[]
 ): StepExecutionState {
-  const newState = { ...state };
+  const newState = { 
+    ...state,
+    processStates: { ...state.processStates }, // Deep copy processStates
+    readyQueue: [...state.readyQueue],
+    waitingProcesses: [...state.waitingProcesses],
+    completedProcesses: new Set(state.completedProcesses),
+    ganttBlocks: [...state.ganttBlocks],
+  };
   
   // Step 1: Check for new arrivals and add to ready queue
   const arrivals = newState.waitingProcesses.filter(p => p.arrivalTime <= newState.currentTime);
@@ -130,6 +169,14 @@ export function executeStep(
         const nextArrival = Math.min(...newState.waitingProcesses.map(p => p.arrivalTime));
         newState.currentTime = nextArrival;
         newState.explanation = `Time ${state.currentTime} → ${nextArrival}: CPU idle, fast-forwarding to next arrival`;
+        
+        // After fast-forward, check for arrivals again
+        const newArrivals = newState.waitingProcesses.filter(p => p.arrivalTime <= newState.currentTime);
+        if (newArrivals.length > 0) {
+          newState.readyQueue = [...newState.readyQueue, ...newArrivals];
+          newState.waitingProcesses = newState.waitingProcesses.filter(p => p.arrivalTime > newState.currentTime);
+        }
+        
         return newState;
       } else {
         // All done
@@ -167,16 +214,31 @@ export function executeStep(
   
   // Update process state
   running.remainingTime -= execTime;
-  newState.processStates[running.id].remainingTime = running.remainingTime;
+  newState.processStates[running.id] = {
+    ...newState.processStates[running.id],
+    remainingTime: running.remainingTime,
+    executedTime: (newState.processStates[running.id].executedTime || 0) + execTime,
+  };
   newState.currentTime = endTime;
+  
+  // Check for new arrivals after execution (important for correct ready queue state)
+  const newArrivals = newState.waitingProcesses.filter(p => p.arrivalTime <= newState.currentTime);
+  if (newArrivals.length > 0) {
+    newState.readyQueue = [...newState.readyQueue, ...newArrivals];
+    newState.waitingProcesses = newState.waitingProcesses.filter(p => p.arrivalTime > newState.currentTime);
+  }
   
   // Step 4: Check if process completed
   if (running.remainingTime === 0) {
     newState.completedProcesses.add(running.id);
-    newState.processStates[running.id].completionTime = endTime;
-    newState.processStates[running.id].turnaroundTime = endTime - running.arrivalTime;
-    newState.processStates[running.id].waitingTime = 
-      newState.processStates[running.id].turnaroundTime! - running.burstTime;
+    const turnaroundTime = endTime - running.arrivalTime;
+    const waitingTime = turnaroundTime - running.burstTime;
+    newState.processStates[running.id] = {
+      ...newState.processStates[running.id],
+      completionTime: endTime,
+      turnaroundTime,
+      waitingTime,
+    };
     newState.runningProcess = null;
     newState.explanation += ` → P${running.pid} completed at t=${endTime}`;
   } else if (algorithm === 'rr') {
@@ -188,6 +250,9 @@ export function executeStep(
     // Process continues (non-preemptive or will be preempted next step)
     newState.runningProcess = null;
   }
+  
+  // Step 5: Update real-time waiting times for all processes
+  updateWaitingTimes(newState, allProcesses);
   
   return newState;
 }

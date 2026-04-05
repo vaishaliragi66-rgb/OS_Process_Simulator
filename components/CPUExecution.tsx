@@ -1,6 +1,8 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toPng } from 'html-to-image';
+import jsPDF from 'jspdf';
 import { useSimStore } from '@/store/useSimStore';
 import { ALGORITHM_INFO } from '@/types';
 import ProcessTable from './ProcessTable';
@@ -17,13 +19,15 @@ export default function CPUExecution() {
     isPlaying,
     executeNextStep,
     setPlaying,
-    goToStep,
+    resetToAlgorithmSelection,
     isExplainMode,
     algorithmInputs,
     visibleBlocks,
   } = useSimStore();
 
   const autoRef = useRef<NodeJS.Timeout | null>(null);
+  const ganttChartRef = useRef<HTMLDivElement>(null);
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
 
   useEffect(() => {
     if (isPlaying && stepState) {
@@ -42,6 +46,68 @@ export default function CPUExecution() {
   const totalProcesses = processes.length;
   const completedCount = stepState.completedProcesses.size;
   const progress = (completedCount / totalProcesses) * 100;
+
+  // Export Gantt chart as PDF (in-progress version)
+  const handleExportPDF = async () => {
+    if (!ganttChartRef.current || !selectedAlgorithm) return;
+
+    setIsExportingPDF(true);
+    try {
+      // Capture with font skip to avoid CORS errors
+      const dataUrl = await toPng(ganttChartRef.current, {
+        quality: 1,
+        pixelRatio: 2,
+        cacheBust: true,
+        backgroundColor: '#0a0f1e',
+        skipFonts: true, // Avoid CORS errors with Google Fonts
+        preferredFontFormat: 'woff2',
+      });
+
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'px',
+        format: 'a4',
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgProps = pdf.getImageProperties(dataUrl);
+      const ratio = Math.min(pdfWidth / imgProps.width, pdfHeight / imgProps.height);
+      const scaledWidth = imgProps.width * ratio;
+      const scaledHeight = imgProps.height * ratio;
+      const xOffset = (pdfWidth - scaledWidth) / 2;
+      const yOffset = 40;
+
+      // Title
+      pdf.setFontSize(18);
+      pdf.setTextColor(0, 229, 255);
+      const title = 'CPU Scheduling Gantt Chart (In Progress)';
+      pdf.text(title, pdfWidth / 2 - pdf.getTextWidth(title) / 2, 25);
+
+      // Metadata
+      pdf.setFontSize(10);
+      pdf.setTextColor(148, 163, 184);
+      pdf.text(`Algorithm: ${ALGORITHM_INFO[selectedAlgorithm].name}`, 20, yOffset - 20);
+      pdf.text(`Progress: ${completedCount}/${totalProcesses} processes`, 20, yOffset - 10);
+      pdf.text(`Current Time: ${stepState.currentTime}`, pdfWidth / 2, yOffset - 20);
+      pdf.text(`Generated: ${new Date().toLocaleString()}`, pdfWidth - 150, yOffset - 20);
+
+      // Add chart
+      pdf.addImage(dataUrl, 'PNG', xOffset, yOffset, scaledWidth, scaledHeight);
+
+      // Footer
+      pdf.setFontSize(8);
+      pdf.setTextColor(100, 116, 139);
+      pdf.text('OS Process Scheduling Simulator', pdfWidth / 2 - 60, pdfHeight - 10);
+
+      pdf.save(`gantt-chart-${selectedAlgorithm}-progress.pdf`);
+    } catch (error) {
+      console.error('Failed to export PDF:', error);
+      alert('Failed to export PDF. Please try again.');
+    } finally {
+      setIsExportingPDF(false);
+    }
+  };
 
   return (
     <motion.div
@@ -132,10 +198,30 @@ export default function CPUExecution() {
 
       {/* Gantt Chart */}
       <div className="mb-6">
-        <div className="text-xs font-mono text-slate-500 uppercase tracking-wider mb-3">
-          Gantt Chart (Timeline)
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs font-mono text-slate-500 uppercase tracking-wider">
+            Gantt Chart (Timeline)
+          </div>
+          {visibleBlocks.length > 0 && (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleExportPDF}
+              disabled={isExportingPDF}
+              className="px-3 py-1.5 rounded-lg font-mono text-[10px] cursor-pointer transition-opacity"
+              style={{
+                background: 'rgba(255,68,102,0.12)',
+                border: '1px solid rgba(255,68,102,0.35)',
+                color: '#FF4466',
+                opacity: isExportingPDF ? 0.6 : 1,
+                cursor: isExportingPDF ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {isExportingPDF ? '⏳ Exporting...' : '📄 Export PDF'}
+            </motion.button>
+          )}
         </div>
-        <div className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)' }}>
+        <div ref={ganttChartRef} className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)' }}>
           {visibleBlocks.length === 0 ? (
             <div className="text-center text-slate-600 text-sm font-mono py-4">
               No execution yet — click "Next Step" to begin
@@ -194,10 +280,10 @@ export default function CPUExecution() {
       {/* Controls */}
       <div className="flex items-center justify-between gap-4">
         <button
-          onClick={() => goToStep('algorithm')}
+          onClick={resetToAlgorithmSelection}
           className="text-sm font-mono text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
         >
-          ← Back
+          ← Back to Algorithm Selection
         </button>
 
         <div className="flex gap-3">

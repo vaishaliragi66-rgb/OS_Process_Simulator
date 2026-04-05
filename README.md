@@ -333,6 +333,7 @@ This version includes major enhancements:
 
 ### 🎓 Learning Features (v2.1 - NEW!)
 ✅ **Algorithm Explanation** - Learn how each algorithm works before simulation  
+
 ✅ **Animated Workflow** - Visual flow showing Ready Queue → Select → Execute → Complete  
 ✅ **Pre-Execution Quiz** - Test understanding with interactive questions  
 ✅ **Process Table Display** - See all process parameters before prediction  
